@@ -13,6 +13,7 @@ from profiles_engine import load_profiles
 from pe_editor import PEError
 from steam_support import is_steam_module
 from analysis_engine import VERSION
+from diagnostics import removal_preflight,compare_files,recover_original,scan_folder
 
 ROOT = Path(__file__).resolve().parent
 LOG_DIR = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'NULLWERK' / 'logs'
@@ -45,6 +46,8 @@ class Nullwerk:
         self.tk, self.ttk, self.dialog, self.message = tk, ttk, filedialog, messagebox
         self.root = root
         self.state = {}
+        self.comparison = None
+        self.diagnostic_report = None
         self.busy = False
         self.closed = False
         self.jobs = queue.Queue()
@@ -79,13 +82,11 @@ class Nullwerk:
         self.filepath = tk.StringVar(value='Choose an EXE or DLL. The input file is never executed.')
         self.hash = tk.StringVar(value='SHA-256 appears after analysis.')
         self.selected_summary = tk.StringVar(value='No DLL selected.')
-        self.editor_enabled = tk.BooleanVar(value=False)
         self.views, self.nav = {}, {}
         self._sidebar()
         self._main()
         self.search.trace_add('write', lambda *a: self.populate())
         self.humor.trace_add('write', lambda *a: self._humor_changed())
-        self.editor_enabled.trace_add('write', lambda *a: self.enable_controls())
         root.bind('<Control-o>', lambda e: self.choose_file())
         root.bind('<Control-f>', lambda e: self.focus_search())
         root.bind('<Control-e>', lambda e: self.save_report())
@@ -150,7 +151,7 @@ class Nullwerk:
         self.label(brand, 'B I N A R Y   W O R K S H O P', size=8, color=C['muted'], bg=C['side']).pack(anchor='w', pady=(4, 0))
         self.label(side, 'WORKSPACE', size=8, bold=True, color='#5c7187', bg=C['side']).pack(anchor='w', padx=24, pady=(35, 12))
         for key, number, title in [('analyze', '01', 'Steam analysis'), ('profile', '02', 'Patch profiles'),
-                                   ('editor', '03', 'Steam imports'), ('activity', '04', 'Activity')]:
+                                   ('editor', '03', 'Diagnostics'), ('activity', '04', 'Activity')]:
             button = tk.Button(side, text=f'{number}   {title}', anchor='w', relief='flat', bd=0,
                                bg=C['side'], fg=C['muted'], activebackground=C['mint_bg'],
                                activeforeground=C['mint'], font=('Segoe UI', 11), padx=17, pady=13,
@@ -291,7 +292,7 @@ class Nullwerk:
         self.profile_text.configure(yscrollcommand=scroll.set)
         self.profile_text.pack(side='left', fill='both', expand=True)
         scroll.pack(side='right', fill='y')
-        self.set_text(self.profile_text, 'CHECKSUMS BEFORE GUT FEELINGS.\n\nNo profiles are included in this release. Local profiles require the necessary authorization and an exact file version.\n\nAnalysis and manual import editing remain available. A new copy is saved only after verification. The original is never overwritten. See LEGAL.md for the scope.')
+        self.set_text(self.profile_text, 'CHECKSUMS BEFORE GUT FEELINGS.\n\nNo profiles are included in this release. Local profiles require the necessary authorization and an exact file version.\n\nAnalysis, folder audits and comparison remain available. A new copy is saved only after verification. The original is never overwritten. See LEGAL.md for the scope.')
 
     def _editor_view(self):
         outer = self.views['editor']
@@ -307,18 +308,26 @@ class Nullwerk:
         notice = self.tk.Frame(view, bg=C['amber_bg'], padx=18, pady=15)
         notice.pack(fill='x', pady=(0, 15))
         self.label(notice, 'Removing imports does not replace their functions.', size=12, bold=True, color=C['amber'], bg=C['amber_bg']).pack(anchor='w')
-        self.editor_note = self.label(notice, 'Call sites remain in the program. The copy may crash or exit silently. This mode does not apply a code patch profile.', color='#e7caa7', bg=C['amber_bg'], wraplength=820)
+        self.editor_note = self.label(notice, 'Import-only copies can exit silently because the program still calls functions that the loader no longer resolves. The desktop does not export these unverified edits.', color='#e7caa7', bg=C['amber_bg'], wraplength=820)
         self.editor_note.pack(anchor='w', pady=(8, 0))
-        self.label(view, '01   Select Steam DLLs under Steam analysis.\n02   Enable import-only editing.\n03   Save a new copy.', size=11, wraplength=820).pack(anchor='w', pady=(2, 16))
+        self.label(view, 'Review dependencies, audit an application folder, or compare an edited copy with its original. Recovery saves the original bytes and restores the original dependencies.', size=11, wraplength=820).pack(anchor='w', pady=(2, 16))
         self.selection_label = self.label(view, variable=self.selected_summary, color=C['mint'], wraplength=820)
         self.selection_label.pack(anchor='w', pady=(0, 15))
-        self.tk.Checkbutton(view, text='Edit Steam import tables only; leave call sites unchanged',
-                            variable=self.editor_enabled, bg=C['bg'], fg=C['text'], selectcolor=C['inset'],
-                            activebackground=C['bg'], activeforeground=C['mint'], highlightthickness=0,
-                            font=('Segoe UI', 10)).pack(anchor='w')
-        self.edit_button = self.ttk.Button(view, text='Save copy without selected Steam imports', state='disabled', command=lambda: self.change_file('edit'))
-        self.edit_button.pack(anchor='w', pady=(16, 0))
-        self.label(view, 'Normal and delay imports of selected DLL names are removed together.\nEditing invalidates an existing Authenticode signature.', size=9, color=C['muted'], wraplength=820).pack(anchor='w', pady=(16, 10))
+        row=self.tk.Frame(view,bg=C['bg']);row.pack(fill='x',pady=(0,10))
+        self.edit_button=self.ttk.Button(row,text='Explain selected imports',state='disabled',command=self.review_imports)
+        self.edit_button.pack(side='left',padx=(0,8))
+        self.scan_button=self.ttk.Button(row,text='Audit folder…',command=self.audit_folder)
+        self.scan_button.pack(side='left')
+        row=self.tk.Frame(view,bg=C['bg']);row.pack(fill='x',pady=(0,10))
+        self.compare_button=self.ttk.Button(row,text='Compare with original…',state='disabled',command=self.compare_original)
+        self.compare_button.pack(side='left',padx=(0,8))
+        self.recover_button=self.ttk.Button(row,text='Save restored original…',state='disabled',command=self.recover_copy)
+        self.recover_button.pack(side='left')
+        self.diagnostic_text=self.text_widget(view,mono=True,height=13)
+        self.diagnostic_text.pack(fill='both',expand=True,pady=(4,10))
+        self.diagnostic_export_button=self.ttk.Button(view,text='Export diagnostics (JSON)…',state='disabled',command=self.save_diagnostics)
+        self.diagnostic_export_button.pack(anchor='w')
+        self.set_text(self.diagnostic_text,'Choose a file or audit a folder. No binary will be executed.\n\nZero reference matches do not prove that a DLL is unused.')
 
     def _activity_view(self):
         view = self.views['activity']
@@ -344,7 +353,7 @@ class Nullwerk:
         self.views[key].tkraise()
         titles = dict(analyze=('Steam dependencies, in focus.', 'Steam imports, functions and reference candidates.'),
                       profile=('Exact profile. Explicit checks.', 'Version-bound changes and byte-exact restoration.'),
-                      editor=('The Steam import workbench.', 'Advanced import-only editing for Steam modules.'),
+                      editor=('Understand before changing bytes.', 'Dependency checks, original comparison and verified recovery.'),
                       activity=('Debugging without a crystal ball.', 'Analysis, changes and verification in the activity log.'))
         title, subtitle = titles[key]
         self.page_title.configure(text=title)
@@ -377,7 +386,11 @@ class Nullwerk:
             button.configure(state='normal' if has and not self.busy else 'disabled')
         self.patch_button.configure(state='normal' if has and self.state.get('profile') and self.state.get('pstate')=='original' and not self.busy else 'disabled')
         self.restore_button.configure(state='normal' if has and self.state.get('profile') and self.state.get('pstate')=='patched' and not self.busy else 'disabled')
-        self.edit_button.configure(state='normal' if has and self.tree.selection() and self.editor_enabled.get() and not self.busy else 'disabled')
+        self.edit_button.configure(state='normal' if has and self.tree.selection() and not self.busy else 'disabled')
+        self.compare_button.configure(state='normal' if has and not self.busy else 'disabled')
+        self.recover_button.configure(state='normal' if self.comparison and self.comparison.get('recovery_available') and not self.busy else 'disabled')
+        self.scan_button.configure(state='normal' if not self.busy else 'disabled')
+        self.diagnostic_export_button.configure(state='normal' if self.diagnostic_report and not self.busy else 'disabled')
 
     def background(self, fn, done):
         if self.busy:
@@ -443,7 +456,8 @@ class Nullwerk:
         self.metric['symbols'].set(str(sum(len(e['symbols']) for e in report['imports'])))
         self.metric['refs'].set(str(sum(len(e['candidate_references']) for e in report['imports'])))
         self.metric['bits'].set(str(report['bits'])+' BIT')
-        self.editor_enabled.set(False)
+        self.comparison=None
+        self.display_diagnostics(report['import_edit_preflight'])
         self.search.set('')
         if profile:
             self.profile_chip.set('PROFILE MATCHED' if pstate=='original' else 'PROFILE OUTPUT MATCHED')
@@ -456,10 +470,12 @@ class Nullwerk:
         else:
             self.profile_chip.set('NO MATCHING PROFILE')
             self.chip.configure(fg=C['amber'], bg=C['amber_bg'])
-            titles = [p['title'] for p in load_profiles(PROFILE_DIR)]
+            titles = report.get('available_profiles',[])
             content = ('No profile matches this exact file.\n\nAnalysis is available. Function changes require a matching version-bound profile.\n\nAVAILABLE PROFILES\n'
                        +('\n'.join('• '+t for t in titles) if titles else 'No profiles are included. Use only local profiles you are authorized to use.'))
         self.set_text(self.profile_text, content)
+        if report.get('profile_warning'):
+            self.set_text(self.profile_text,content+'\n\n'+report['profile_warning'])
         self.populate()
         self.show_view('analyze')
         self.status.set('Analysis complete. '+('Exact profile matched.' if profile else 'No matching profile; analysis is available.'))
@@ -509,11 +525,91 @@ class Nullwerk:
             chunks += ['', 'REFERENCE CANDIDATES *']
             chunks.extend('  '+hex(h['rva'])+'  '+h['kind']+'\n  '+h['symbol'] for h in e['candidate_references'])
             chunks += ['', '* Byte patterns; complete coverage is not guaranteed.', '']
+            if is_steam_module(e['name']):
+                check=removal_preflight(self.state['report'],[e['name']])
+                chunks += ['IMPORT-ONLY EXPORT: BLOCKED']+[r['message'] for r in check['reasons']]+['']
         if chunks:
             self.set_text(self.detail, '\n'.join(chunks))
         else:
             self.set_text(self.detail, 'Select a DLL to view functions and reference candidates.\n\nMulti-select: Ctrl / Shift.\n\nA directory-only check does not establish whether a system DLL is missing.')
         self.enable_controls()
+
+    def display_diagnostics(self, report):
+        self.diagnostic_report=report
+        kind=report.get('kind','import_preflight')
+        if kind=='folder_audit':
+            text=(f"FOLDER AUDIT\n\nPE files: {report['files_analyzed']}\nUnreadable inputs: {len(report['errors'])}\n"
+                  f"Same-directory links: {len(report['static_links'])}\nArchitecture mismatches: {len(report['architecture_mismatches'])}\n"
+                  f"Scan limit reached: {report['scan_truncated']}\n\n")
+            for item in report['files']:
+                steam=[e for e in item['analysis']['imports'] if is_steam_module(e['name'])]
+                text+=f"{item['id']}  {item['relative_path']}\n  {item['analysis']['bits']} bit; {len(steam)} static Steam modules\n"
+            text+='\n'+'\n'.join(report['limitations'])
+        elif kind in ('binary_comparison','original_recovery'):
+            text=report['explanation']
+            if kind=='binary_comparison':
+                text+=(f"\n\nChanged bytes: {report['changed_bytes']}\nExecutable bytes unchanged: {report['executable_bytes_unchanged']}"
+                       f"\nRecognized import-only edit: {report['recognized_import_only_edit']}\nRecovery available: {report['recovery_available']}")
+                text+='\n\nRemoved imports:\n'+'\n'.join(e['name']+' ('+e['kind']+')' for e in report['removed_imports'])
+            text+='\n\nRuntime behavior has not been tested.'
+        else:
+            text=('IMPORT-ONLY PREFLIGHT\n\n'+('Selected modules: '+', '.join(report['selected_modules']) if report['selected_modules'] else 'No static Steam imports selected.')
+                  +f"\nImported functions: {report['imported_functions']}\nReference candidates: {report['reference_candidates']}\n\n"
+                  +'\n\n'.join(r['message'] for r in report['reasons']))
+        self.set_text(self.diagnostic_text,text)
+
+    def review_imports(self):
+        if not self.state or self.busy:return
+        names=[self.state['report']['imports'][int(i)]['name'] for i in self.tree.selection()]
+        self.display_diagnostics(removal_preflight(self.state['report'],names))
+        self.show_view('editor');self.enable_controls()
+
+    def audit_folder(self):
+        if self.busy:return
+        folder=self.dialog.askdirectory(parent=self.root,title='Choose a folder for a read-only dependency audit')
+        if not folder:return
+        def done(report):
+            self.display_diagnostics(report);self.show_view('editor')
+            self.status.set(f"Folder audit complete: {report['files_analyzed']} PE files. Runtime loading is unverified.")
+            self.log('AUDIT','Read-only folder audit completed; no input binary was executed.')
+        self.background(lambda:scan_folder(folder),done)
+
+    def compare_original(self):
+        if not self.state or self.busy:return
+        original=self.dialog.askopenfilename(parent=self.root,title='Select the unmodified original for comparison',
+                                             filetypes=[('Windows PE files','*.exe *.dll'),('All files','*.*')])
+        if not original:return
+        modified=self.state['path']
+        def done(report):
+            self.comparison=report
+            self.display_diagnostics(report);self.show_view('editor')
+            self.status.set('Comparison complete. '+('Original recovery is available.' if report['recovery_available'] else 'No automatic recovery available.'))
+            self.log('COMPARE','Compared two local snapshots without executing either file.')
+        self.background(lambda:compare_files(original,modified),done)
+
+    def recover_copy(self):
+        if not self.comparison or not self.comparison['recovery_available'] or self.busy:return
+        comparison=dict(self.comparison)
+        out=self.dialog.asksaveasfilename(parent=self.root,title='Save a verified copy of the supplied original',
+                                          initialfile='restored-original.exe',defaultextension='.exe',
+                                          filetypes=[('Windows PE files','*.exe *.dll')])
+        if not out:return
+        def done(report):
+            self.display_diagnostics(report)
+            self.status.set('Original bytes restored to a new copy.')
+            self.log('RECOVER','Byte-identical copy of the supplied original saved; original dependencies restored.')
+            self.message.showinfo('Original restored',report['explanation']+'\n\nThis does not establish runtime compatibility.',parent=self.root)
+        self.background(lambda:recover_original(comparison['original_file'],comparison['modified_file'],out,
+                        comparison['original_sha256'],comparison['modified_sha256']),done)
+
+    def save_diagnostics(self):
+        if not self.diagnostic_report or self.busy:return
+        out=self.dialog.asksaveasfilename(parent=self.root,title='Save path-free diagnostics',initialfile='diagnostics.json',
+                                          defaultextension='.json',filetypes=[('JSON diagnostics','*.json')])
+        if out:
+            try:export_report(out,self.diagnostic_report)
+            except (OSError,PEError) as error:self.message.showerror('Report not saved',str(error),parent=self.root)
+            else:self.status.set('Path-free diagnostics saved.')
 
     def copy_hash(self):
         if not self.state:
@@ -564,7 +660,7 @@ class Nullwerk:
         def work():
             if source.read_bytes()!=original:
                 raise PEError('The input file changed. Analyze it again before proceeding.')
-            return transform(source, out, profile_mode=mode=='patch', restore=mode=='restore', remove_names=names if mode=='edit' else None)
+            return transform(source, out, profile_mode=mode=='patch', restore=mode=='restore', remove_names=names if mode=='edit' else None,expected_sha256=self.state['report']['sha256'])
         def saved(report):
             self.state['report'] = report
             self.status.set('Copy saved and statically verified: '+out)

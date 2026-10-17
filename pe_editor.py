@@ -32,6 +32,9 @@ class PEFile:
         self.directory_count = min(self.u32(self.optional + nc), (self.optional_size-dd)//8, 16)
         self.directory_base = self.optional + dd
         self.headers_size = self.u32(self.optional + 60)
+        self.image_base = int.from_bytes(self.slice(self.optional+(28 if self.bits==32 else 24), self.bits//8), 'little')
+        if self.u16(self.pe+6)>96:
+            raise PEError('The image exceeds the Windows limit of 96 sections.')
         self.sections = []
         for i in range(self.u16(self.pe + 6)):
             o = self.optional + self.optional_size + 40*i
@@ -65,14 +68,25 @@ class PEFile:
             if rva+size > self.headers_size:
                 raise PEError('The RVA extends beyond the headers.')
             return rva
+        matches=[]
         for va, vs, ro, rs in self.sections:
             if va <= rva < va+max(vs, rs):
                 delta = rva-va
                 if delta+size > rs:
                     raise PEError('The RVA is outside the stored section data.')
                 self.slice(ro+delta, size)
-                return ro+delta
+                matches.append(ro+delta)
+        if len(matches)>1:
+            raise PEError('The RVA maps to overlapping sections and is ambiguous.')
+        if matches:return matches[0]
         raise PEError('The RVA does not map to a section.')
+
+    def address_rva(self, value, uses_va=False):
+        if uses_va and value:
+            if value<self.image_base:
+                raise PEError('A legacy delay-import address is below the image base.')
+            return value-self.image_base
+        return value
 
     def name(self, rva):
         chars = bytearray()
@@ -97,10 +111,11 @@ class PEFile:
                 self.tables[kind] = dict(index=index, rva=rva, size=size,
                                          stride=stride, records=records)
                 return
-            if kind == 'delay' and not (struct.unpack_from('<I', record)[0] & 1):
-                raise PEError('Legacy VA-based delay imports are not supported.')
-            name_rva = struct.unpack_from('<I', record, name_offset)[0]
-            entry = dict(key=(kind, i), kind=kind, name=self.name(name_rva), record=record)
+            uses_va=kind=='delay' and not (struct.unpack_from('<I',record)[0]&1)
+            if kind=='delay' and struct.unpack_from('<I',record)[0]&~1:
+                raise PEError('Reserved delay-import attribute bits are set.')
+            name_rva = self.address_rva(struct.unpack_from('<I', record, name_offset)[0],uses_va)
+            entry = dict(key=(kind, i), kind=kind, name=self.name(name_rva), record=record,uses_va=uses_va)
             records.append(entry)
             self.imports.append(entry)
         raise PEError('The import directory has no valid terminator.')

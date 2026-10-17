@@ -4,7 +4,7 @@
 
 NULLWERK inspects Windows EXE/DLL import tables and identifies references to Steam components. It supports explicit, local changes for software you are authorized to maintain. Files are analyzed without being executed; changes are saved as verified copies.
 
-**Version 4.1 ships no product-specific patch profiles.** The default package provides analysis and a manual Steam import-table editor. The optional profile engine works only with a locally supplied, exact-version profile; no automatic program patch is available out of the box.
+**Version 4.2 ships no product-specific patch profiles.** The default package provides analysis, folder audits, comparison and recovery. The optional profile engine works only with a locally supplied, exact-version profile; no automatic program patch is available out of the box.
 
 ## Rights and limitations
 
@@ -14,8 +14,10 @@ Read [legal scope](LEGAL.md), the [notice](NOTICE.txt), and [technical limitatio
 
 ## Features
 
-- Read-only analysis of PE32/PE32+ imports, imported functions and reference candidates.
-- A clearly marked Steam import-table editor, which leaves call sites unchanged and can produce an unusable output.
+- Read-only analysis of PE32/PE32+ normal, ordinal and delay imports, including legacy VA descriptors; imported functions and reference candidates.
+- Preflight diagnostics that explain why import-only edits can prevent startup. The desktop does not export these unverified edits.
+- Read-only folder audits, same-directory dependency candidates and x86/x64 mismatch checks.
+- Original/copy comparison and byte-identical recovery of exactly recognized import edits. Recovery restores the original dependencies.
 - An optional exact-hash local profile engine with byte-for-byte restoration.
 - JSON/CSV exports that omit local file paths and filenames by default.
 - English desktop interface, application icon, activity log and optional developer humor.
@@ -29,9 +31,9 @@ Open the repository's **Releases** page for downloads.
 
 | Package | Prerequisite |
 |---|---|
-| `NULLWERK-4.1.0-Windows-Setup.exe` | Windows 10/11 x64; Python is included |
-| `NULLWERK-4.1.0-Source-Setup.exe` | Windows 10/11 x64 and Python 3.11+ with Tcl/Tk |
-| `NULLWERK-4.1.0-Install.zip` | Windows 10/11 and compatible Python 3.11+ with Tcl/Tk; extract all files and open `Install.cmd` |
+| `NULLWERK-4.2.0-Windows-Setup.exe` | Windows 10/11 x64; Python is included |
+| `NULLWERK-4.2.0-Source-Setup.exe` | Windows 10/11 x64 and Python 3.11+ with Tcl/Tk |
+| `NULLWERK-4.2.0-Install.zip` | Windows 10/11 and compatible Python 3.11+ with Tcl/Tk; extract all files and open `Install.cmd` |
 
 Installations are per-user. The source edition uses `%LOCALAPPDATA%/Programs/NULLWERK-Source`; the bundled edition uses `%LOCALAPPDATA%/Programs/NULLWERK`. Neither downloads Python on the destination PC. Packages include the project license and notices. Bundled runtime licenses are collected from the actual build installations.
 
@@ -51,10 +53,12 @@ Shortcuts: **Ctrl+O** open, **Ctrl+F** search, **Ctrl+E** export report, **F5** 
 
 ```console
 python workbench.py analyze application.exe --report analysis.json
-python workbench.py edit-imports application.exe --remove steam_api.dll --understand-import-only -o application_copy.exe
+python workbench.py scan application-folder --report folder-audit.json
+python workbench.py compare original.exe edited.exe --report comparison.json
+python workbench.py recover original.exe edited.exe -o restored-original.exe
 ```
 
-The editor changes import metadata and does not replace imported functions. Test an authorized copy and keep a backup. Reports still contain hashes and imported names; review them before sharing. `--include-paths` explicitly includes local paths in a CLI report.
+The desktop offers diagnostics and recovery. Recovery requires the matching original and refuses copies containing unrelated changes. It does not create a standalone edition. The expert-only CLI `edit-imports` command requires both `--understand-import-only` and `--allow-unsafe-import-edit`; its output is an unverified metadata experiment that can fail to start. It never replaces imported functions. Test authorized copies and keep backups. Reports still contain hashes and imported names; review them before sharing. `--include-paths` explicitly includes local paths in a CLI report.
 
 For authorized local profile development, see [the data format](docs/PROFILES.md). The source/Python edition reads the local `profiles` directory. The bundled edition reads `%LOCALAPPDATA%/NULLWERK/profiles` and does not load legacy profiles from its installation directory. No JSON profiles are included in public builds or accepted in this repository.
 
@@ -65,7 +69,7 @@ python -m unittest discover -s tests -v
 python tools/check_public_release.py
 ```
 
-See [Windows builds](docs/BUILDING.md), [privacy](docs/PRIVACY.md), [GitHub publishing](docs/GITHUB.md), and [contribution rules](CONTRIBUTING.md). Automated tests use synthetic PE data.
+See [Windows builds](docs/BUILDING.md), [privacy](docs/PRIVACY.md), [GitHub publishing](docs/GITHUB.md), and [contribution rules](CONTRIBUTING.md). Automated tests use synthetic PE data. See [research and format coverage](docs/RESEARCH.md) for primary references, tested cases and limits. No compatibility percentage for commercial software is claimed.
 
 ## License
 

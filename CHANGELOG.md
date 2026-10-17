@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.2.0
+
+- Added import-removal preflight and removed unverified import-only export from the desktop. Expert CLI experiments require an additional explicit override.
+- Added original/copy comparison and byte-identical recovery for exactly recognized import-only edits. Unrelated changes are rejected.
+- Added read-only folder audits, same-directory link candidates and x86/x64 mismatch detection.
+- Added legacy VA delay-import analysis, bound-IAT diagnostics, wide DLL-string indicators and bounded one-pass reference scanning.
+- Added nested report-path redaction, changed-input checks and analysis fallback when local profiles are malformed.
+- Expanded synthetic format tests and Windows installer/GUI verification. No game-specific patch data or universal runtime-compatibility claim is included.
+
 ## 4.1.0 — generic distribution and rights notices
 
 - Removed all bundled product-specific patch profiles and their documentation.

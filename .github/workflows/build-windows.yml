@@ -28,9 +28,45 @@ jobs:
         run: |
           & ./dist/nullwerk-cli/nullwerk-cli.exe --help
           if ($LASTEXITCODE) { throw 'Packaged CLI smoke test failed.' }
+      - name: Install bundled edition and test real GUI, CLI, notices and uninstall
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:RUNNER_TEMP 'NULLWERK-installed-test'
+          $setup = (Get-Item ./dist/NULLWERK-4.2.0-Windows-Setup.exe).FullName
+          $install = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/DIR="' + $installed + '"')) -Wait -PassThru
+          if ($install.ExitCode) { throw 'Bundled installation failed.' }
+          foreach ($appFolder in @('GUI','CLI')) {
+            foreach ($notice in @('Python.txt','Tcl.txt','Tk.txt','PyInstaller.txt','Inno-Setup.txt')) {
+              if (!(Test-Path (Join-Path $installed ($appFolder + '\THIRD_PARTY_LICENSES\' + $notice)))) { throw 'Installed runtime notice missing.' }
+            }
+          }
+          $env:NULLWERK_FIXTURE = Join-Path $env:RUNNER_TEMP 'synthetic-input.exe'
+          python -c "import os,sys; from pathlib import Path; sys.path.insert(0,'tests'); from test_diagnostics import executable; Path(os.environ['NULLWERK_FIXTURE']).write_bytes(executable(64))"
+          if ($LASTEXITCODE) { throw 'Synthetic fixture creation failed.' }
+          & (Join-Path $installed 'CLI\nullwerk-cli.exe') analyze $env:NULLWERK_FIXTURE
+          if ($LASTEXITCODE) { throw 'Installed CLI analysis failed.' }
+          $gui = Start-Process -FilePath (Join-Path $installed 'GUI\NULLWERK.exe') -PassThru
+          try {
+            $deadline = [DateTime]::UtcNow.AddSeconds(20)
+            do {
+              Start-Sleep -Milliseconds 200
+              $gui.Refresh()
+              if ($gui.HasExited) { throw 'Packaged GUI exited before creating its window.' }
+            } until ($gui.MainWindowHandle -ne 0 -or [DateTime]::UtcNow -ge $deadline)
+            if ($gui.MainWindowHandle -eq 0 -or $gui.MainWindowTitle -notlike '*NULLWERK*') { throw 'Packaged GUI window was not observed.' }
+            Write-Output 'Installed packaged GUI window observed.'
+          } finally {
+            if (!$gui.HasExited) {
+              $null = $gui.CloseMainWindow()
+              if (!$gui.WaitForExit(5000)) { $gui.Kill(); $gui.WaitForExit() }
+            }
+          }
+          $uninstall = Start-Process -FilePath (Join-Path $installed 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+          if ($uninstall.ExitCode) { throw 'Bundled uninstallation failed.' }
+          if (Test-Path (Join-Path $installed 'GUI\NULLWERK.exe')) { throw 'Bundled GUI remains after uninstall.' }
       - uses: actions/upload-artifact@v7
         with:
-          name: NULLWERK-4.1.0-Windows-Installer
+          name: NULLWERK-4.2.0-Windows-Installer
           path: |
             dist/*Windows-Setup.exe
             dist/*Windows-Setup.exe.sha256

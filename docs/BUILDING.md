@@ -8,11 +8,13 @@ Requirements: Windows 10/11 x64, Python 3.11+ with Tcl/Tk, and Inno Setup 6.
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_windows.ps1
 ```
 
-The script installs the pinned build dependency, runs tests, bundles the GUI and CLI using PyInstaller, and compiles the Inno Setup script. The resulting `dist/NULLWERK-4.1.0-Windows-Setup.exe` includes the Python runtime. Build dependencies need network access; the installed application works offline.
+The script installs the pinned build dependency, runs tests, bundles the GUI and CLI using PyInstaller, and compiles the Inno Setup script. The resulting `dist/NULLWERK-4.2.0-Windows-Setup.exe` includes the Python runtime. Build dependencies need network access; the installed application works offline.
 
 PyInstaller is not a cross-compiler. Build Windows applications on Windows. The repository's manual **Build Windows installer** GitHub workflow performs this process on a Windows runner and uploads the installer as a workflow artifact. It does not create a release or publish the repository.
 
 The workflow checks for Inno Setup and installs it through the runner's Chocolatey package manager if needed. The resulting installer uses the current user's application directory and does not require elevation.
+
+The Windows workflow installs the bundled edition into a temporary runner directory, checks runtime notices, analyzes a synthetic PE with the installed CLI, observes the real packaged GUI window, closes it and exercises the uninstaller. Source-edition tests also exercise the diagnostics views and recovery widgets. Consult the release validation record for the actual result of each check.
 
 ## Offline source installer
 
@@ -36,7 +38,7 @@ For automated Windows smoke testing, set `NULLWERK_SETUP_SILENT=1` before runnin
 python tools/build_zip_installer.py
 ```
 
-This produces `dist/NULLWERK-4.1.0-Install.zip` using only the Python standard library. Extract all files and open `Install.cmd`. The launcher runs the included setup script using system Windows PowerShell, with the same application payload and SHA-256 checks as the EXE installer. It avoids loading a native x64 bootstrap, so it can also use a compatible 32-bit or ARM Python installation. It still requires Windows 10/11 and Python 3.11+ with Tcl/Tk.
+This produces `dist/NULLWERK-4.2.0-Install.zip` using only the Python standard library. Extract all files and open `Install.cmd`. The launcher runs the included setup script using system Windows PowerShell, with the same application payload and SHA-256 checks as the EXE installer. It avoids loading a native x64 bootstrap, so it can also use a compatible 32-bit or ARM Python installation. It still requires Windows 10/11 and Python 3.11+ with Tcl/Tk.
 
 For automated testing, set `NULLWERK_SETUP_SILENT=1` and `NULLWERK_PACKAGE_PATH` to the absolute extracted `Application.zip` path before starting `Setup.ps1` in a separate Windows PowerShell process.
 

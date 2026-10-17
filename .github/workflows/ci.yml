@@ -33,14 +33,14 @@ jobs:
         with:
           python-version: '3.14'
       - run: python tools/build_source_installer.py
-      - run: python tools/verify_installer.py dist/NULLWERK-4.1.0-Source-Setup.exe
+      - run: python tools/verify_installer.py dist/NULLWERK-4.2.0-Source-Setup.exe
       - run: python tools/build_zip_installer.py
       - uses: actions/upload-artifact@v7
         with:
           name: NULLWERK-source-installer-test
           path: |
-            dist/NULLWERK-4.1.0-Source-Setup.exe
-            dist/NULLWERK-4.1.0-Install.zip
+            dist/NULLWERK-4.2.0-Source-Setup.exe
+            dist/NULLWERK-4.2.0-Install.zip
           if-no-files-found: error
   source-installer-windows:
     needs: source-installer
@@ -64,7 +64,7 @@ jobs:
           $tokens = $null; $parseErrors = $null
           [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'installer/source_setup.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
           if ($parseErrors) { throw ($parseErrors | Out-String) }
-          $process = Start-Process -FilePath ./installer-test/NULLWERK-4.1.0-Source-Setup.exe -Wait -PassThru
+          $process = Start-Process -FilePath ./installer-test/NULLWERK-4.2.0-Source-Setup.exe -Wait -PassThru
           if ($process.ExitCode) {
             if (Test-Path $env:NULLWERK_SETUP_LOG) { Get-Content $env:NULLWERK_SETUP_LOG }
             throw ('Source installer failed with exit code ' + $process.ExitCode)
@@ -73,7 +73,7 @@ jobs:
           if (!(Test-Path (Join-Path $installed 'app.py'))) { throw 'Installed application not found.' }
           $preserved = Join-Path $installed 'custom-test.txt'
           Set-Content -LiteralPath $preserved -Value 'Keep this file during upgrade.'
-          Expand-Archive ./installer-test/NULLWERK-4.1.0-Install.zip -DestinationPath ./installer-test/zip-edition
+          Expand-Archive ./installer-test/NULLWERK-4.2.0-Install.zip -DestinationPath ./installer-test/zip-edition
           $env:NULLWERK_PACKAGE_PATH = (Resolve-Path ./installer-test/zip-edition/Application.zip).Path
           $scriptPath = (Resolve-Path ./installer-test/zip-edition/Setup.ps1).Path
           $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

@@ -98,7 +98,7 @@ function InstallApp {
   New-Item $key -Force|Out-Null
   $ps=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
   $uninstall='"'+$ps+'" -NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $script:target 'Uninstall.ps1')+'"'
-  $values=@{DisplayName='NULLWERK (Python edition)';DisplayVersion='4.1.0';Publisher='NULLWERK contributors';InstallLocation=$script:target;DisplayIcon=(Join-Path $script:target 'assets\nullwerk.ico');UninstallString=$uninstall}
+  $values=@{DisplayName='NULLWERK (Python edition)';DisplayVersion='4.2.0';Publisher='NULLWERK contributors';InstallLocation=$script:target;DisplayIcon=(Join-Path $script:target 'assets\nullwerk.ico');UninstallString=$uninstall}
   foreach($k in $values.Keys){New-ItemProperty $key -Name $k -Value $values[$k] -PropertyType String -Force|Out-Null}
   New-ItemProperty $key -Name NoModify -Value 1 -PropertyType DWord -Force|Out-Null
   New-ItemProperty $key -Name NoRepair -Value 1 -PropertyType DWord -Force|Out-Null

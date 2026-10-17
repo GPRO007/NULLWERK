@@ -17,10 +17,11 @@ import tempfile
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='4.1.0'
+VERSION='4.2.0'
 APP_FILES=['app.py','analysis_engine.py','pe_editor.py','profiles_engine.py',
-           'workbench.py','steam_support.py','privacy.py','LICENSE','LEGAL.md',
-           'NOTICE.txt','THIRD_PARTY_NOTICES.md']
+           'workbench.py','steam_support.py','privacy.py','diagnostics.py','LICENSE','LEGAL.md',
+           'NOTICE.txt','THIRD_PARTY_NOTICES.md','README.md','profiles/README.md',
+           'docs/LIMITATIONS.md','docs/RESEARCH.md','docs/PRIVACY.md','docs/PROFILES.md']
 
 
 def align(n,to):return (n+to-1)//to*to
@@ -28,9 +29,9 @@ def align(n,to):return (n+to-1)//to*to
 
 def payload_bytes():
     files={name:(ROOT/name).read_bytes() for name in APP_FILES}
-    for folder in ['assets','profiles']:
+    for folder in ['assets']:
         for p in sorted((ROOT/folder).rglob('*')):
-            if p.is_file() and p.suffix in ['.png','.ico','.json']:
+            if p.is_file() and p.suffix in ['.png','.ico']:
                 files[p.relative_to(ROOT).as_posix()]=p.read_bytes()
     # Git can check out PS1 as CRLF. Keep package hashes identical across
     # checkouts while retaining valid PowerShell text.

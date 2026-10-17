@@ -1,37 +1,10 @@
 {
-  "version": "4.1.0",
+  "version": "4.2.0",
   "distribution_profiles": 0,
-  "local_linux_unit_tests_passed": 23,
-  "ci": {
-    "platforms": [
-      "ubuntu-latest",
-      "windows-latest"
-    ],
-    "python": [
-      "3.11",
-      "3.14"
-    ],
-    "linux_tests_passed": 23,
-    "windows_tests_passed": 17,
-    "windows_build_only_tests_skipped": 6,
-    "test_run_id": 39053956403,
-    "windows_build_run_id": 39053972499
-  },
-  "source_exe_windows_installation_tested": true,
-  "source_zip_windows_upgrade_tested": true,
-  "installed_source_gui_smoke_tested": true,
-  "self_contained_windows_installer_built": true,
-  "packaged_cli_smoke_tested": true,
-  "bundled_installer_install_uninstall_tested": false,
-  "bundled_gui_smoke_tested": false,
+  "local_linux_unit_tests_passed": 41,
+  "windows_validation_status": "pending",
   "public_source_scan": "passed",
-  "requested_product_names_and_hashes": "absent",
   "legal_review_by_qualified_counsel": false,
   "repository_visibility": "private",
-  "sha256": {
-    "NULLWERK-4.1.0-Windows-Setup.exe": "cd17b675c75821e3871706d1a45d09701ee42d6418eab682a2e46cb501bae792",
-    "NULLWERK-4.1.0-Source-Setup.exe": "2a61c074c340be51529ceb847f75049707d69501d1c4f9278940e33b89c5859b",
-    "NULLWERK-4.1.0-Install.zip": "384e927c8556b667b2d274c54c1169c2f279491e255124104c901049b2d33760"
-  },
-  "limitations": "Synthetic PE fixtures only. No third-party game runtime compatibility or legal compliance is established. Unsigned builds."
+  "limitations": "Static diagnostics and synthetic test cases. No universal Steam removal or commercial-game compatibility claim. Builds are unsigned."
 }
