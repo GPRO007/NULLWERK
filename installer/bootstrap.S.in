@@ -1,0 +1,89 @@
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    sub rsp, 120
+    xor ecx, ecx
+    lea rdx, [rip + setup_path]
+    mov r8d, 32768
+    call QWORD PTR [rip + api_GetModuleFileNameW]
+    test eax, eax
+    jz failed
+    cmp eax, 32768
+    jae failed
+    lea rcx, [rip + setup_environment]
+    lea rdx, [rip + setup_path]
+    call QWORD PTR [rip + api_SetEnvironmentVariableW]
+    test eax, eax
+    jz failed
+    # The native installer always reads its own verified overlay. Do not let an
+    # inherited standalone-install setting redirect the payload.
+    lea rcx, [rip + package_environment]
+    xor edx, edx
+    call QWORD PTR [rip + api_SetEnvironmentVariableW]
+    lea rcx, [rip + powershell_path]
+    mov edx, 1024
+    call QWORD PTR [rip + api_GetSystemDirectoryW]
+    test eax, eax
+    jz failed
+    cmp eax, 960
+    jae failed
+    lea rdi, [rip + powershell_path]
+    lea rdi, [rdi + rax * 2]
+    lea rsi, [rip + powershell_suffix]
+copy_suffix:
+    mov ax, WORD PTR [rsi]
+    mov WORD PTR [rdi], ax
+    add rsi, 2
+    add rdi, 2
+    test ax, ax
+    jnz copy_suffix
+    lea rcx, [rip + powershell_path]
+    lea rdx, [rip + command_line]
+    xor r8d, r8d
+    xor r9d, r9d
+    mov QWORD PTR [rsp + 32], 0
+    mov QWORD PTR [rsp + 40], 0x08000000
+    mov QWORD PTR [rsp + 48], 0
+    mov QWORD PTR [rsp + 56], 0
+    lea rax, [rip + startup_info]
+    mov QWORD PTR [rsp + 64], rax
+    lea rax, [rip + process_info]
+    mov QWORD PTR [rsp + 72], rax
+    call QWORD PTR [rip + api_CreateProcessW]
+    test eax, eax
+    jz failed
+    mov rcx, QWORD PTR [rip + process_info]
+    mov edx, 0xffffffff
+    call QWORD PTR [rip + api_WaitForSingleObject]
+    mov rcx, QWORD PTR [rip + process_info]
+    lea rdx, [rip + exit_code]
+    call QWORD PTR [rip + api_GetExitCodeProcess]
+    mov rcx, QWORD PTR [rip + process_info + 8]
+    call QWORD PTR [rip + api_CloseHandle]
+    mov rcx, QWORD PTR [rip + process_info]
+    call QWORD PTR [rip + api_CloseHandle]
+    mov ecx, DWORD PTR [rip + exit_code]
+    call QWORD PTR [rip + api_ExitProcess]
+failed:
+    xor ecx, ecx
+    lea rdx, [rip + error_message]
+    lea r8, [rip + error_title]
+    mov r9d, 16
+    call QWORD PTR [rip + api_MessageBoxW]
+    mov ecx, 1
+    call QWORD PTR [rip + api_ExitProcess]
+.section .rdata,"a",@progbits
+@CONSTANTS@
+.section .data
+.balign 8
+setup_path: .zero 65536
+powershell_path: .zero 2048
+startup_info: .long 104
+    .zero 100
+process_info: .zero 24
+exit_code: .long 1
+command_line:
+@COMMAND@
+.section .idata,"aw",@progbits
+@IMPORTS@

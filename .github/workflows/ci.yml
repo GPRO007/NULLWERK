@@ -1,0 +1,84 @@
+name: Tests and public-source checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -v
+      - run: python tools/check_public_release.py
+      - if: runner.os == 'Windows'
+        run: python tools/smoke_gui.py
+  source-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: python tools/build_source_installer.py
+      - run: python tools/verify_installer.py dist/NULLWERK-4.1.0-Source-Setup.exe
+      - run: python tools/build_zip_installer.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NULLWERK-source-installer-test
+          path: |
+            dist/NULLWERK-4.1.0-Source-Setup.exe
+            dist/NULLWERK-4.1.0-Install.zip
+          if-no-files-found: error
+  source-installer-windows:
+    needs: source-installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@v8
+        with:
+          name: NULLWERK-source-installer-test
+          path: installer-test
+      - name: Install source edition and exercise installed GUI
+        shell: pwsh
+        run: |
+          $env:NULLWERK_SETUP_SILENT = '1'
+          $env:NULLWERK_SETUP_LOG = Join-Path $env:RUNNER_TEMP 'nullwerk-setup-error.txt'
+          $tokens = $null; $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'installer/source_setup.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+          $process = Start-Process -FilePath ./installer-test/NULLWERK-4.1.0-Source-Setup.exe -Wait -PassThru
+          if ($process.ExitCode) {
+            if (Test-Path $env:NULLWERK_SETUP_LOG) { Get-Content $env:NULLWERK_SETUP_LOG }
+            throw ('Source installer failed with exit code ' + $process.ExitCode)
+          }
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\NULLWERK-Source'
+          if (!(Test-Path (Join-Path $installed 'app.py'))) { throw 'Installed application not found.' }
+          $preserved = Join-Path $installed 'custom-test.txt'
+          Set-Content -LiteralPath $preserved -Value 'Keep this file during upgrade.'
+          Expand-Archive ./installer-test/NULLWERK-4.1.0-Install.zip -DestinationPath ./installer-test/zip-edition
+          $env:NULLWERK_PACKAGE_PATH = (Resolve-Path ./installer-test/zip-edition/Application.zip).Path
+          $scriptPath = (Resolve-Path ./installer-test/zip-edition/Setup.ps1).Path
+          $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $process = Start-Process -FilePath $powershell -ArgumentList @('-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $scriptPath + '"')) -Wait -PassThru
+          if ($process.ExitCode) { throw 'ZIP installer failed.' }
+          if (!(Test-Path $preserved)) { throw 'Upgrade removed an unowned file.' }
+          python tools/smoke_gui.py --app-root $installed
+          if ($LASTEXITCODE) { throw 'Installed GUI smoke test failed.' }

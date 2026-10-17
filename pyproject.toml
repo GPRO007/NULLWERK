@@ -1,0 +1,11 @@
+[project]
+name = "nullwerk"
+version = "4.1.0"
+description = "Offline PE import analysis and authorized Steam-integration maintenance."
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "NULLWERK contributors" }]
+dependencies = []
+
+[tool.ruff]
+line-length = 110

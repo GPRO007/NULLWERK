@@ -1,0 +1,37 @@
+name: Build Windows installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE) { throw 'Inno Setup installation failed.' }
+          }
+      - name: Test and build
+        shell: pwsh
+        run: ./tools/build_windows.ps1
+      - name: Smoke-test packaged command line
+        shell: pwsh
+        run: |
+          & ./dist/nullwerk-cli/nullwerk-cli.exe --help
+          if ($LASTEXITCODE) { throw 'Packaged CLI smoke test failed.' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NULLWERK-4.1.0-Windows-Installer
+          path: |
+            dist/*Windows-Setup.exe
+            dist/*Windows-Setup.exe.sha256
+          if-no-files-found: error

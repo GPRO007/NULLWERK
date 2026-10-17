@@ -1,0 +1,14 @@
+NULLWERK - authorized software maintenance
+
+Use this tool only where you have the necessary permission or a legally
+applicable right to inspect, modify and, if relevant, distribute software.
+Possessing or purchasing a copy does not by itself establish every such right.
+
+This release includes no product-specific patch profiles, third-party
+executables, replacement Steam binaries or built-in license-response emulation.
+It cannot grant ownership, change a third party's license or establish that a
+particular modification is lawful. Changes can also break software features.
+
+NULLWERK is independent and is not affiliated with or endorsed by Valve.
+Read LEGAL.md, LICENSE and THIRD_PARTY_NOTICES.md before use or redistribution.
+The MIT warranty disclaimer applies only to the extent permitted by law.
